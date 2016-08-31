@@ -5,14 +5,58 @@ from openprocurement.api.utils import (
     save_tender,
     opresource,
     json_view,
-    context_unpack,
-    check_tender_status
+    context_unpack
 )
 from openprocurement.api.validation import (
     validate_contract_data,
     validate_patch_contract_data,
 )
 from openprocurement.api.views.contract import TenderAwardContractResource as BaseTenderAwardContractResource
+
+
+def check_tender_status(request):
+    tender = request.validated['tender']
+    now = get_now()
+    if tender.lots:
+        if any([i.status in ['claim', 'answered', 'pending'] and i.relatedLot is None for i in tender.complaints]):
+            return
+        for lot in tender.lots:
+            if lot.status != 'active':
+                continue
+            lot_awards = [i for i in tender.awards if i.lotID == lot.id]
+            if not lot_awards:
+                continue
+            last_award = lot_awards[-1]
+            pending_complaints = any([
+                i['status'] in ['claim', 'answered', 'pending'] and i.relatedLot == lot.id
+                for i in tender.complaints
+            ])
+            pending_awards_complaints = any([
+                i.status in ['claim', 'answered', 'pending']
+                for a in lot_awards
+                for i in a.complaints
+            ])
+            stand_still_end = max([
+                a.complaintPeriod.endDate or now
+                for a in lot_awards
+            ])
+            if pending_complaints or pending_awards_complaints or not stand_still_end <= now:
+                continue
+            elif last_award.status == 'unsuccessful':
+                lot.status = 'unsuccessful'
+                continue
+            elif last_award.status == 'active' and any([i.status == 'active' and i.awardID == last_award.id for i in tender.contracts]):
+                lot.status = 'complete'
+        statuses = set([lot.status for lot in tender.lots])
+        if statuses == set(['cancelled']):
+            tender.status = 'cancelled'
+        elif not statuses.difference(set(['unsuccessful', 'cancelled'])):
+            tender.status = 'unsuccessful'
+        elif not statuses.difference(set(['complete', 'unsuccessful', 'cancelled'])):
+            tender.status = 'complete'
+    else:
+        if tender.contracts and tender.contracts[-1].status == 'active':
+            tender.status = 'complete'
 
 
 @opresource(name='Tender Limited Contracts',

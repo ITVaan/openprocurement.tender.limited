@@ -10,7 +10,7 @@ from openprocurement.api.models import (
     plain_role, view_role, create_role, edit_role, enquiries_role, listing_role,
     Administrator_role, schematics_default_role, schematics_embedded_role,
     chronograph_role, chronograph_view_role, draft_role, SANDBOX_MODE,
-    embedded_lot_role, Guarantee, ListType, LotValue as BaseLotValue,
+    embedded_lot_role, ListType, LotValue as BaseLotValue,
     default_lot_role, get_tender, validate_lots_uniq,
 )
 from openprocurement.api.models import (
@@ -119,8 +119,8 @@ class ProcuringEntity(BaseProcuringEntity):
 class Lot(Model):
     class Options:
         roles = {
-            'create': whitelist('id', 'title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value', 'guarantee'),
-            'edit': whitelist('title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value', 'guarantee'),
+            'create': whitelist('id', 'title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value'),
+            'edit': whitelist('title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value'),
             'embedded': embedded_lot_role,
             'view': default_lot_role,
             'default': default_lot_role,
@@ -141,19 +141,12 @@ class Lot(Model):
     date = IsoDateTimeType()
     value = ModelType(Value, required=True)
     status = StringType(choices=['active', 'cancelled', 'unsuccessful', 'complete'], default='active')
-    guarantee = ModelType(Guarantee)
 
     @serializable(serialized_name="value", type=ModelType(Value))
     def lot_value(self):
         return Value(dict(amount=self.value.amount,
                           currency=self.__parent__.value.currency,
                           valueAddedTaxIncluded=self.__parent__.value.valueAddedTaxIncluded))
-
-    @serializable(serialized_name="guarantee", serialize_when_none=False, type=ModelType(Guarantee))
-    def lot_guarantee(self):
-        if self.guarantee:
-            currency = self.__parent__.guarantee.currency if self.__parent__.guarantee else self.guarantee.currency
-            return Guarantee(dict(amount=self.guarantee.amount, currency=currency))
 
 
 class LotValue(BaseLotValue):
@@ -228,7 +221,6 @@ class Tender(SchematicsDocument, Model):
     description_en = StringType()
     description_ru = StringType()
     date = IsoDateTimeType()
-    lots = ListType(ModelType(Lot), default=list(), validators=[validate_lots_uniq])
     tenderID = StringType()  # TenderID should always be the same as the OCID. It is included to make the flattened data structure more convenient.
     items = ListType(ModelType(Item), required=True, min_size=1, validators=[validate_cpv_group, validate_items_uniq])  # The goods and services to be purchased, broken into line items wherever possible. Items should not be duplicated, but a quantity of 2 specified instead.
     value = ModelType(Value, required=True)  # The total estimated value of the procurement.
@@ -343,6 +335,8 @@ class Tender(ReportingTender):
     create_accreditation = 3
     edit_accreditation = 4
     procuring_entity_kinds = ['general', 'special', 'defense']
+    lots = ListType(ModelType(Lot), default=list(), validators=[validate_lots_uniq])
+
 
 NegotiationTender = Tender
 

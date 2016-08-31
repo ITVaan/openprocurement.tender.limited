@@ -31,8 +31,8 @@ class TenderLimitedNegotiationQuickLotResource(TenderLotResource):
                 operation, tender.status))
             self.request.errors.status = 403
             return
-        if [True for award in tender.awards if award.status in ['active', 'complete']]:
-            self.request.errors.add('body', 'data', 'Can\'t {} lot in current when you have awards'.format(
+        if tender.awards:
+            self.request.errors.add('body', 'data', 'Can\'t {} lot when you have awards'.format(
                 operation, tender.status))
             self.request.errors.status = 403
         return True
