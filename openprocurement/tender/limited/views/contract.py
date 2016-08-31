@@ -6,18 +6,13 @@ from openprocurement.api.utils import (
     opresource,
     json_view,
     context_unpack,
+    check_tender_status
 )
 from openprocurement.api.validation import (
     validate_contract_data,
     validate_patch_contract_data,
 )
 from openprocurement.api.views.contract import TenderAwardContractResource as BaseTenderAwardContractResource
-
-
-def check_tender_status(request):
-    tender = request.validated['tender']
-    if tender.contracts and tender.contracts[-1].status == 'active':
-        tender.status = 'complete'
 
 
 @opresource(name='Tender Limited Contracts',
