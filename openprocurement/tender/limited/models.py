@@ -14,6 +14,8 @@ from openprocurement.api.models import (
 from openprocurement.api.models import (
     Value, IsoDateTimeType, Document, Organization, SchematicsDocument,
     Model, Revision, Period, view_bid_role,
+    embedded_lot_role, ListType, LotValue as BaseLotValue,
+    default_lot_role, get_tender, validate_lots_uniq,
 )
 from openprocurement.api.models import validate_cpv_group, validate_items_uniq
 from openprocurement.api.models import get_now
@@ -233,6 +235,16 @@ ReportingTender = Tender
 
 
 class Award(ReportingAward):
+
+    lotID = MD5Type()
+
+    def validate_lotID(self, data, lotID):
+        if isinstance(data['__parent__'], Model):
+            if not lotID and data['__parent__'].lots:
+                raise ValidationError(u'This field is required.')
+            if lotID and lotID not in [i.id for i in data['__parent__'].lots]:
+                raise ValidationError(u"lotID should be one of lots")
+
     class Options:
         roles = {
             'create': award_create_role,
@@ -240,8 +252,71 @@ class Award(ReportingAward):
         }
 
 
+class Lot(Model):
+    class Options:
+        roles = {
+            'create': whitelist('id', 'title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value'),
+            'edit': whitelist('title', 'title_en', 'title_ru', 'description', 'description_en', 'description_ru', 'value'),
+            'embedded': embedded_lot_role,
+            'view': default_lot_role,
+            'default': default_lot_role,
+            'Administrator': whitelist('auctionPeriod'),
+        }
+
+    id = MD5Type(required=True, default=lambda: uuid4().hex)
+    title = StringType(required=True, min_length=1)
+    title_en = StringType()
+    title_ru = StringType()
+    description = StringType()
+    description_en = StringType()
+    description_ru = StringType()
+    date = IsoDateTimeType()
+    value = ModelType(Value, required=True)
+    status = StringType(choices=['active', 'cancelled', 'unsuccessful', 'complete'], default='active')
+
+    @serializable(serialized_name="value", type=ModelType(Value))
+    def lot_value(self):
+        return Value(dict(amount=self.value.amount,
+                          currency=self.__parent__.value.currency,
+                          valueAddedTaxIncluded=self.__parent__.value.valueAddedTaxIncluded))
+
+
+class LotValue(BaseLotValue):
+    class Options:
+        roles = {
+            'create': whitelist('value', 'relatedLot', 'subcontractingDetails'),
+            'edit': whitelist('value', 'relatedLot', 'subcontractingDetails'),
+        }
+
+    subcontractingDetails = StringType()
+    status = StringType(choices=['pending', 'active', 'unsuccessful'],
+                        default='pending')
+
+    def validate_value(self, data, value):
+        if value and isinstance(data['__parent__'], Model) and (data['__parent__'].status not in ('invalid', 'deleted')) and data['relatedLot']:
+            lots = [i for i in get_tender(data['__parent__']).lots if i.id == data['relatedLot']]
+            if not lots:
+                return
+            lot = lots[0]
+            if lot.value.amount < value.amount:
+                raise ValidationError(u"value of bid should be less than value of lot")
+            if lot.get('value').currency != value.currency:
+                raise ValidationError(u"currency of bid should be identical to currency of value of lot")
+            if lot.get('value').valueAddedTaxIncluded != value.valueAddedTaxIncluded:
+                raise ValidationError(u"valueAddedTaxIncluded of bid should be identical to valueAddedTaxIncluded of value of lot")
+
+    @serializable(serialized_name="minimalStep", type=ModelType(Value))
+    def lot_minimalStep(self):
+        return None
+
+    def validate_relatedLot(self, data, relatedLot):
+        if isinstance(data['__parent__'], Model) and (data['__parent__'].status not in ('invalid', 'deleted')) and relatedLot not in [i.id for i in get_tender(data['__parent__']).lots]:
+            raise ValidationError(u"relatedLot should be one of lots")
+
+
 class Contract(BaseContract):
     items = ListType(ModelType(Item))
+
 
 @implementer(ITender)
 class Tender(ReportingTender):
@@ -258,6 +333,7 @@ class Tender(ReportingTender):
     create_accreditation = 3
     edit_accreditation = 4
     procuring_entity_kinds = ['general', 'special', 'defense']
+    lots = ListType(ModelType(Lot), default=list(), validators=[validate_lots_uniq])
 
 NegotiationTender = Tender
 
