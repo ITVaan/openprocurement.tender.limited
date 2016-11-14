@@ -22,6 +22,7 @@ from openprocurement.api.models import Cancellation as BaseCancellation
 from openprocurement.api.models import ITender
 from openprocurement.api.models import Contract as BaseContract
 from openprocurement.api.models import ProcuringEntity as BaseProcuringEntity
+from openprocurement.api.models import get_tender
 from openprocurement.tender.openua.models import Complaint as BaseComplaint
 from openprocurement.tender.openua.models import Item
 from openprocurement.tender.openua.models import Tender as OpenUATender
@@ -243,6 +244,9 @@ class Award(ReportingAward):
                 raise ValidationError(u'This field is required.')
             if lotID and lotID not in [i.id for i in data['__parent__'].lots]:
                 raise ValidationError(u"lotID should be one of lots")
+            tender_awards = get_tender(data['__parent__']).awards
+            if len(tender_awards) > len(set([award['lotID'] for award in tender_awards if award['status'] == 'pending'])):
+                raise ValidationError(u"Two awards can't have same lotID")
 
     class Options:
         roles = {
