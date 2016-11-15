@@ -5,7 +5,8 @@ from copy import deepcopy
 from openprocurement.tender.limited.tests.base import (
     BaseTenderContentWebTest, test_tender_data, test_tender_negotiation_data,
     test_tender_negotiation_quick_data, test_organization, test_lots,
-    test_tender_negotiation_data_2items, test_tender_negotiation_quick_data_2items)
+    test_tender_negotiation_data_2items, test_tender_negotiation_quick_data_2items,
+    test_tender_negotiation_quick_data_4items, test_tender_negotiation_data_4items)
 
 
 class TenderAwardResourceTest(BaseTenderContentWebTest):
@@ -1997,15 +1998,13 @@ class Tender2LotNegotiationAwardComplaintResourceTest(BaseTenderContentWebTest):
 
         response = self.app.patch_json('/tenders/{}/awards/{}?acc_token={}'.format(
             self.tender_id, self.award_id, self.tender_token),
-            {'data': {'lotID': self.second_lot['id']}})
+            {'data': {'lotID': self.second_lot['id']}},
+            status=403)
 
-        self.assertEqual(response.json['data']['lotID'], self.second_lot['id'])
-
-test_tender_negotiation_data_4items = deepcopy(test_tender_negotiation_data_2items)
-test_tender_negotiation_data_4items['items'] = [deepcopy(test_tender_negotiation_data_2items['items'][0]),
-                                                deepcopy(test_tender_negotiation_data_2items['items'][0]),
-                                                deepcopy(test_tender_negotiation_data_2items['items'][0]),
-                                                deepcopy(test_tender_negotiation_data_2items['items'][0])]
+        self.assertEqual(response.status, '403 Forbidden')
+        self.assertEqual(response.json['errors'], [{"location": "body",
+                                                    "name": "lotID",
+                                                    "description": "Can't set same lotID for two awards"}])
 
 
 class Tender4LotNegotiationAwardComplaintResourceTest(BaseTenderContentWebTest):
@@ -2101,9 +2100,17 @@ class Tender4LotNegotiationAwardComplaintResourceTest(BaseTenderContentWebTest):
 
         response = self.app.patch_json('/tenders/{}/awards/{}?acc_token={}'.format(
             self.tender_id, self.award_id, self.tender_token),
-            {'data': {'lotID': self.second_lot['id']}})
+            {'data': {'lotID': self.second_lot['id']}},
+            status=403)
 
-        self.assertEqual(response.json['data']['lotID'], self.second_lot['id'])
+        self.assertEqual(response.status, '403 Forbidden')
+        self.assertEqual(response.json['errors'], [{"location": "body",
+                                                    "name": "lotID",
+                                                    "description": "Can't set same lotID for two awards"}])
+
+
+class Tender4LotNegotiationQuickAwardComplaintResourceTest(Tender4LotNegotiationAwardComplaintResourceTest):
+    initial_data = test_tender_negotiation_quick_data_4items
 
 
 class Tender2LotNegotiationQuickAwardComplaintResourceTest(Tender2LotNegotiationAwardComplaintResourceTest):

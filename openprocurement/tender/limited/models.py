@@ -244,9 +244,6 @@ class Award(ReportingAward):
                 raise ValidationError(u'This field is required.')
             if lotID and lotID not in [i.id for i in data['__parent__'].lots]:
                 raise ValidationError(u"lotID should be one of lots")
-            tender_awards = get_tender(data['__parent__']).awards
-            if len(tender_awards) > len(set([award['lotID'] for award in tender_awards if award['status'] == 'pending'])):
-                raise ValidationError(u"Two awards can't have same lotID")
 
     class Options:
         roles = {
