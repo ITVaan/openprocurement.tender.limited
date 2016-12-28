@@ -20,6 +20,13 @@ def check_tender_status(request):
         tender.status = 'complete'
 
 
+def get_lot_by_id(tender, lot_id):
+    for lot in tender['lots']:
+        if lot['id'] == lot_id:
+            return lot
+    return None
+
+
 def check_tender_negotiation_status(request):
     tender = request.validated['tender']
     now = get_now()
@@ -148,6 +155,8 @@ class TenderNegotiationAwardContractResource(TenderAwardContractResource):
             self.request.errors.status = 403
             return
 
+        contract = self.request.validated['contract']
+        tender = self.request.validated['tender']
         data = self.request.validated['data']
         if self.request.context.status != 'active' and 'status' in data and data['status'] == 'active':
             tender = self.request.validated['tender']
@@ -186,6 +195,13 @@ class TenderNegotiationAwardContractResource(TenderAwardContractResource):
             self.request.errors.add('body', 'data', 'Can\'t update contract status')
             self.request.errors.status = 403
             return
+
+        if self.request.context.status == 'active' and tender.get('lots') and contract.get('items'):
+            lot = get_lot_by_id(tender, contract['items'][0].get('relatedLot'))
+            if lot and lot.status != 'active':
+                self.request.errors.add('body', 'data', 'Can\'t sign contract when relatedLot not active')
+                self.request.errors.status = 403
+                return
 
         if self.request.context.status == 'active' and not self.request.context.dateSigned:
             self.request.context.dateSigned = get_now()

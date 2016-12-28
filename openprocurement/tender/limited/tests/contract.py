@@ -787,6 +787,49 @@ class TenderNegotiationLot2ContractResourceTest(BaseTenderContentWebTest):
         self.assertEqual(response.status, '200 OK')
         self.assertEqual(response.json['data']['status'], 'complete')
 
+    def test_sign_contract_by_cancelled_lot(self):
+        """ Try sign contract when lot is cancelled """
+        response = self.app.get('/tenders/{}/contracts'.format(self.tender_id))
+        self.contract1_id = response.json['data'][0]['id']
+
+        # time travel
+        tender = self.db.get(self.tender_id)
+        for i in tender.get('awards', []):
+            if i.get('complaintPeriod',
+                     {}):  # reporting procedure does not have complaintPeriod
+                i['complaintPeriod']['endDate'] = i['complaintPeriod'][
+                    'startDate']
+        self.db.save(tender)
+
+        # cancel lot
+        response = self.app.post_json(
+            '/tenders/{}/cancellations?acc_token={}'.format(
+                self.tender_id, self.tender_token
+            ),
+            {"data": {
+                    "status": "active",
+                    "cancellationOf": "lot",
+                    "reason": "tender useless",
+                    "relatedLot": self.lot1['id']
+                }
+            })
+
+        self.assertEqual(response.status, '201 Created')
+        self.assertEqual(response.json["data"]["status"], "active")
+        self.assertEqual(response.json["data"]["relatedLot"], self.lot1['id'])
+
+        # try sign contract
+        response = self.app.patch_json(
+            '/tenders/{}/contracts/{}?acc_token={}'.format(
+                self.tender_id, self.contract1_id, self.tender_token),
+            {"data": {"status": "active"}},
+            status=403)
+        self.assertEqual(response.status, '403 Forbidden')
+        self.assertEqual(
+            response.json['errors'][0],
+            {u'description': u"Can't sign contract when relatedLot not active",
+             u'location': u'body', u'name': u'data'})
+
     def test_create_two_contract(self):
         response = self.app.get('/tenders/{}?acc_token={}'.format(self.tender_id, self.tender_token))
         tender = response.json['data']
